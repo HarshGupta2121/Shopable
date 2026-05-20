@@ -1,0 +1,27 @@
+[
+  {
+    "file": "C:\\Users\\Harsh\\OneDrive\\Desktop\\my dreem\\src\\app\\account\\orders\\[id]\\page.js",
+    "errors": [
+      "128:37 - @next/next/no-img-element - Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element"
+    ]
+  },
+  {
+    "file": "C:\\Users\\Harsh\\OneDrive\\Desktop\\my dreem\\src\\app\\checkout\\page.js",
+    "errors": [
+      "262:49 - @next/next/no-img-element - Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element"
+    ]
+  },
+  {
+    "file": "C:\\Users\\Harsh\\OneDrive\\Desktop\\my dreem\\src\\app\\signin\\page.js",
+    "errors": [
+      "56:13 - null - Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')."
+    ]
+  },
+  {
+    "file": "C:\\Users\\Harsh\\OneDrive\\Desktop\\my dreem\\src\\app\\signup\\page.js",
+    "errors": [
+      "56:13 - null - Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect').",
+      "67:13 - null - Unused eslint-disable directive (no problems were reported from 'react-hooks/set-state-in-effect')."
+    ]
+  }
+]
