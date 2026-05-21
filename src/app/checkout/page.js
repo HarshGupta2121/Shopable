@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useVoice } from '@/context/VoiceContext';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
@@ -502,9 +502,14 @@ export default function CheckoutPage() {
         }
     }, [handleNext, handleBack, handlePlaceOrder, currentStep, paymentMethod, triggerCouponApplyByCode, speak]);
 
+    const processCommandRef = useRef(processLocalVoiceCommand);
+    useEffect(() => {
+        processCommandRef.current = processLocalVoiceCommand;
+    }, [processLocalVoiceCommand]);
+
     useEffect(() => {
         if (lastCommand) {
-            processLocalVoiceCommand(lastCommand);
+            processCommandRef.current(lastCommand);
         }
     }, [lastCommandId]);
 
