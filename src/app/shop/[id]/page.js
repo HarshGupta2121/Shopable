@@ -111,14 +111,50 @@ export default function ProductDetailsPage({ params }) {
             speak(reviewText);
         };
 
+        const handleVoiceAddToWishlist = () => {
+            if (product) {
+                const isAlreadyInWishlist = isInWishlist(product.id);
+                if (isAlreadyInWishlist) {
+                    const message = `${product.name} is already in your wishlist.`;
+                    speak(message);
+                    showToast(message, 'info');
+                } else {
+                    toggleWishlist(product);
+                    const message = `Added ${product.name} to wishlist.`;
+                    speak(message);
+                    showToast(message, 'success');
+                }
+            }
+        };
+
+        const handleVoiceRemoveFromWishlist = () => {
+            if (product) {
+                const isAlreadyInWishlist = isInWishlist(product.id);
+                if (!isAlreadyInWishlist) {
+                    const message = `${product.name} is not in your wishlist.`;
+                    speak(message);
+                    showToast(message, 'info');
+                } else {
+                    toggleWishlist(product);
+                    const message = `Removed ${product.name} from wishlist.`;
+                    speak(message);
+                    showToast(message, 'info');
+                }
+            }
+        };
+
         window.addEventListener('TRIGGER_ADD_TO_CART', handleVoiceAddToCart);
         window.addEventListener('TRIGGER_READ_REVIEWS', handleVoiceReadReviews);
+        window.addEventListener('TRIGGER_ADD_TO_WISHLIST', handleVoiceAddToWishlist);
+        window.addEventListener('TRIGGER_REMOVE_FROM_WISHLIST', handleVoiceRemoveFromWishlist);
         
         return () => {
             window.removeEventListener('TRIGGER_ADD_TO_CART', handleVoiceAddToCart);
             window.removeEventListener('TRIGGER_READ_REVIEWS', handleVoiceReadReviews);
+            window.removeEventListener('TRIGGER_ADD_TO_WISHLIST', handleVoiceAddToWishlist);
+            window.removeEventListener('TRIGGER_REMOVE_FROM_WISHLIST', handleVoiceRemoveFromWishlist);
         };
-    }, [product, selectedSize, selectedColor, addToCart, speak, showToast, reviews, loadingReviews]); 
+    }, [product, selectedSize, selectedColor, addToCart, speak, showToast, reviews, loadingReviews, isInWishlist, toggleWishlist]); 
 
     useEffect(() => {
         if (product) {

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useVoice } from '../context/VoiceContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useToast } from '../context/ToastContext';
 import SearchBar from './SearchBar';
 import { useGesture } from '../context/GestureContext';
 import { Mic, MicOff, ShoppingCart, Search, User, Globe, LogIn, UserPlus, Heart, Hand, Sun, Moon, Settings } from 'lucide-react';
@@ -19,11 +20,26 @@ const Layout = ({ children }) => {
     const [showLangMenu, setShowLangMenu] = useState(false);
     const { theme, setTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
+    const { showToast } = useToast();
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setMounted(true);
     }, []);
+
+    useEffect(() => {
+        const handleShowToast = (event) => {
+            const { toastMessage, toastType } = event.detail || {};
+            if (toastMessage) {
+                showToast(toastMessage, toastType || 'info');
+            }
+        };
+
+        window.addEventListener('TRIGGER_SHOW_TOAST', handleShowToast);
+        return () => {
+            window.removeEventListener('TRIGGER_SHOW_TOAST', handleShowToast);
+        };
+    }, [showToast]);
 
     if (!mounted) {
         return null;

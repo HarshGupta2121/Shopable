@@ -17,6 +17,7 @@ export const VoiceProvider = ({ children }) => {
   const [isSupported, setIsSupported] = useState(false);
   const recognitionRef = useRef(null);
   const shouldListenRef = useRef(false);
+  const isPausedForSpeakingRef = useRef(false);
 
   // Use refs to access latest state/functions inside the immutable useEffect closure
   const router = useRouter();
@@ -29,6 +30,7 @@ export const VoiceProvider = ({ children }) => {
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       shouldListenRef.current = false;
+      isPausedForSpeakingRef.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
     }
@@ -44,6 +46,12 @@ export const VoiceProvider = ({ children }) => {
 
   const speak = useCallback((text) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
+      // Pause recognition to avoid picking up synthesized speech
+      if (shouldListenRef.current && recognitionRef.current) {
+        isPausedForSpeakingRef.current = true;
+        recognitionRef.current.stop();
+      }
+
       stopSpeaking();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = language;
@@ -51,16 +59,29 @@ export const VoiceProvider = ({ children }) => {
         setIsSpeaking(true);
         isSpeakingRef.current = true;
       };
-      utterance.onend = () => {
+      
+      const handleSpeechEnd = () => {
         setIsSpeaking(false);
         isSpeakingRef.current = false;
         lastSpeakEndRef.current = Date.now();
+        
+        if (isPausedForSpeakingRef.current) {
+          isPausedForSpeakingRef.current = false;
+          // Unmute microphone after short delay to clear echo
+          setTimeout(() => {
+            if (shouldListenRef.current && recognitionRef.current && !isSpeakingRef.current) {
+              try {
+                recognitionRef.current.start();
+              } catch (e) {
+                console.warn("Failed to restart recognition after speech:", e);
+              }
+            }
+          }, 400);
+        }
       };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        isSpeakingRef.current = false;
-        lastSpeakEndRef.current = Date.now();
-      };
+
+      utterance.onend = handleSpeechEnd;
+      utterance.onerror = handleSpeechEnd;
       window.speechSynthesis.speak(utterance);
     }
   }, [language, stopSpeaking]);
@@ -126,8 +147,8 @@ export const VoiceProvider = ({ children }) => {
           speak(result.text);
         }
         if (result.action) {
-          console.log("Dispatching Voice Action:", result.action);
-          window.dispatchEvent(new CustomEvent(result.action));
+          console.log("Dispatching Voice Action:", result.action, result);
+          window.dispatchEvent(new CustomEvent(result.action, { detail: result }));
         }
       }
       // Handle String Response (Legacy/Simple)
@@ -158,6 +179,10 @@ export const VoiceProvider = ({ children }) => {
         recognition.onend = () => {
           console.log("Voice recognition ended. Should restart?", shouldListenRef.current);
           setIsListening(false);
+          if (isPausedForSpeakingRef.current) {
+            console.log("Speech recognition temporarily paused for speech synthesis.");
+            return;
+          }
           if (shouldListenRef.current) {
             // Attempt restart
             try {
@@ -261,6 +286,7 @@ export const VoiceProvider = ({ children }) => {
     if (recognitionRef.current && !isListening) {
       try {
         shouldListenRef.current = true;
+        isPausedForSpeakingRef.current = false;
         recognitionRef.current.start();
       } catch (e) {
         if (e.name === 'InvalidStateError') {

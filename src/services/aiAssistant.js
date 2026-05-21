@@ -66,6 +66,20 @@ export const processCommand = async (command, router, pathname, language = 'en-U
         return t("Opening your wishlist.", "Aapki wishlist khul rahi hai.");
     }
 
+    if (match(['add to wishlist', 'add this to wishlist', 'wishlist mein daalo', 'wishlist me daalo'])) {
+        return {
+            text: "",
+            action: 'TRIGGER_ADD_TO_WISHLIST'
+        };
+    }
+
+    if (match(['remove from wishlist', 'remove this from wishlist', 'wishlist se hatao'])) {
+        return {
+            text: "",
+            action: 'TRIGGER_REMOVE_FROM_WISHLIST'
+        };
+    }
+
     // --- 2. Product Browsing Commands ---
     if (match(['trending products', 'trending saman', 'top-selling', 'sabse zyada bikne wale'])) {
         router.push('/shop?sort=trending');
@@ -398,8 +412,10 @@ export const processCommand = async (command, router, pathname, language = 'en-U
         return null;
     }
 
-    return t(
-        "I didn't quite catch that. You can ask for help if you're stuck.",
-        "Maaf kijiye, main samajh nahi paaya. Agar aap atak gaye hain to madad maang sakte hain."
-    );
+    return {
+        text: "",
+        action: 'TRIGGER_SHOW_TOAST',
+        toastMessage: t("Command not recognized. Try saying 'Help'.", "Nirdeish samajh nahi aaya. 'Help' bol kar dekhein."),
+        toastType: 'warning'
+    };
 };
