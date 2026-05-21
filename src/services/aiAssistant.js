@@ -390,7 +390,7 @@ export const processCommand = async (command, router, pathname, language = 'en-U
     }
 
     // Default fallback
-    if (pathname === '/signin' || pathname === '/signup') {
+    if (pathname === '/signin' || pathname === '/signup' || pathname === '/checkout') {
         return null;
     }
 

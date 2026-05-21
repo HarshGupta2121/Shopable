@@ -323,122 +323,155 @@ export default function CheckoutPage() {
             return;
         }
 
-        // 2. Select Payment Methods
-        if (lower.includes('razorpay') || lower.includes('select razorpay')) {
-            setPaymentMethod('razorpay');
-            speak("Selected Razorpay payment method.");
-            return;
-        }
-        if (lower.includes('cash on delivery') || lower.includes('cod') || lower.includes('cash delivery')) {
-            setPaymentMethod('cod');
-            speak("Selected Cash on Delivery.");
-            return;
-        }
-        if (lower.includes('use card') || lower.includes('select card') || lower.includes('credit card') || lower.includes('debit card')) {
-            setPaymentMethod('card');
-            speak("Selected Credit or Debit card payment method.");
-            return;
-        }
-        if (lower.includes('use upi') || lower.includes('select upi')) {
-            setPaymentMethod('upi');
-            speak("Selected UPI payment method.");
-            return;
-        }
-
-        // 3. Address Field Voice Filling
-        // Name
-        const nameMatch = lower.match(/(?:my name|set name|naam is|naam ke liye|name is|name to|name)\s*(?:is|to)?\s+(.+)/i);
-        if (nameMatch && nameMatch[1]) {
-            const cleanVal = nameMatch[1].trim();
-            setAddress(prev => ({ ...prev, name: cleanVal }));
-            speak(`Name set to ${cleanVal}`);
-            return;
-        }
-
-        // Phone
-        const phoneMatch = lower.match(/(?:my phone|set phone|set contact|phone number|phone is|number is|number|phone)\s*(?:is|to)?\s+(.+)/i);
-        if (phoneMatch && phoneMatch[1]) {
-            const cleanVal = phoneMatch[1].replace(/\s+/g, '').trim();
-            setAddress(prev => ({ ...prev, phone: cleanVal }));
-            speak(`Phone set to ${cleanVal}`);
-            return;
-        }
-
-        // Street Address
-        const streetMatch = lower.match(/(?:my address|set address|set street|street is|street to|address is|address|street)\s*(?:is|to)?\s+(.+)/i);
-        if (streetMatch && streetMatch[1]) {
-            const cleanVal = streetMatch[1].trim();
-            setAddress(prev => ({ ...prev, street: cleanVal }));
-            speak(`Street address set to ${cleanVal}`);
-            return;
-        }
-
-        // City
-        const cityMatch = lower.match(/(?:my city|set city|city is|city to|city)\s*(?:is|to)?\s+(.+)/i);
-        if (cityMatch && cityMatch[1]) {
-            const cleanVal = cityMatch[1].trim();
-            setAddress(prev => ({ ...prev, city: cleanVal }));
-            speak(`City set to ${cleanVal}`);
-            return;
-        }
-
-        // Pincode
-        const pinMatch = lower.match(/(?:my pincode|set pincode|my pin|set pin|pincode is|pin is|pincode|pin)\s*(?:is|to)?\s+(\d+)/i);
-        if (pinMatch && pinMatch[1]) {
-            const cleanVal = pinMatch[1].trim();
-            setAddress(prev => ({ ...prev, pincode: cleanVal }));
-            speak(`Pincode set to ${cleanVal}`);
-            return;
-        }
-
-        // Coupon Apply
-        const couponMatch = lower.match(/(?:apply coupon|use coupon|coupon code|coupon)\s*(?:is|to)?\s+(.+)/i);
-        if (couponMatch && couponMatch[1]) {
-            const code = couponMatch[1].replace(/\s+/g, '').toUpperCase().trim();
-            setCouponCode(code);
-            triggerCouponApplyByCode(code);
-            return;
-        }
-
-        // 4. Card Form Voice Filling (when Card payment is active)
-        if (paymentMethod === 'card') {
-            // Card Number
-            const cardNoMatch = lower.match(/(?:card number|set card number|number is|number)\s*(?:is|to)?\s+(.+)/i);
-            if (cardNoMatch && cardNoMatch[1]) {
-                const cleanVal = cardNoMatch[1].replace(/\s+/g, '').trim();
-                setCardDetails(prev => ({ ...prev, number: cleanVal }));
-                speak("Card number set.");
-                return;
-            }
-            // Card Expiry
-            const cardExpMatch = lower.match(/(?:expiry|card expiry|expire date|expire)\s*(?:is|to)?\s+(.+)/i);
-            if (cardExpMatch && cardExpMatch[1]) {
-                let val = cardExpMatch[1].replace(/\s+/g, '').replace(/[^\d/]/g, '').trim();
-                if (val.length === 4 && !val.includes('/')) {
-                    val = val.substring(0, 2) + '/' + val.substring(2, 4);
+        // Helper to extract value preserving case
+        const extractValue = (keywords, removePrefixes = []) => {
+            for (const kw of keywords) {
+                const idx = lower.indexOf(kw);
+                if (idx !== -1) {
+                    let val = commandText.substring(idx + kw.length).trim();
+                    // Strip prefixes case-insensitively
+                    for (const prefix of removePrefixes) {
+                        const regex = new RegExp(`^(?:${prefix})\\s+`, 'i');
+                        val = val.replace(regex, '').trim();
+                    }
+                    // Strip trailing "hai"
+                    val = val.replace(/\s+hai$/i, '').trim();
+                    return val;
                 }
-                setCardDetails(prev => ({ ...prev, expiry: val }));
-                speak("Card expiry date set.");
+            }
+            return null;
+        };
+
+        // --- STEP 1: SHIPPING ADDRESS ---
+        if (currentStep === 1) {
+            // Full Name
+            const nameVal = extractValue(['name', 'naam'], ['is', 'to', 'mera', 'ke liye', 'karo', 'set']);
+            if (nameVal) {
+                setAddress(prev => ({ ...prev, name: nameVal }));
+                speak(`Name set to ${nameVal}`);
                 return;
             }
-            // CVV
-            const cvvMatch = lower.match(/(?:cvv|security code)\s*(?:is|to)?\s+(\d+)/i);
-            if (cvvMatch && cvvMatch[1]) {
-                const cleanVal = cvvMatch[1].trim();
-                setCardDetails(prev => ({ ...prev, cvv: cleanVal }));
-                speak("Card CVV set.");
+
+            // Phone
+            const phoneVal = extractValue(['phone', 'contact', 'mobile', 'number'], ['is', 'to', 'mera', 'ke liye', 'karo', 'set']);
+            if (phoneVal) {
+                const cleanPhone = phoneVal.replace(/\D/g, '');
+                if (cleanPhone) {
+                    setAddress(prev => ({ ...prev, phone: cleanPhone }));
+                    speak(`Phone number set.`);
+                }
                 return;
             }
-            // Card Name
-            const cardNameMatch = lower.match(/(?:card name|cardholder|card holder|name on card)\s*(?:is|to)?\s+(.+)/i);
-            if (cardNameMatch && cardNameMatch[1]) {
-                const cleanVal = cardNameMatch[1].trim();
-                setCardDetails(prev => ({ ...prev, name: cleanVal }));
-                speak(`Cardholder name set to ${cleanVal}`);
+
+            // Street Address
+            const streetVal = extractValue(['address', 'street', 'gali', 'pata', 'house'], ['is', 'to', 'mera', 'ke liye', 'karo', 'set']);
+            if (streetVal) {
+                setAddress(prev => ({ ...prev, street: streetVal }));
+                speak(`Street address set to ${streetVal}`);
+                return;
+            }
+
+            // City
+            const cityVal = extractValue(['city', 'shahar', 'sehar', 'dist', 'district'], ['is', 'to', 'mera', 'ke liye', 'karo', 'set']);
+            if (cityVal) {
+                setAddress(prev => ({ ...prev, city: cityVal }));
+                speak(`City set to ${cityVal}`);
+                return;
+            }
+
+            // Pincode
+            const pinVal = extractValue(['pincode', 'pin code', 'pin'], ['is', 'to', 'mera', 'ke liye', 'karo', 'set']);
+            if (pinVal) {
+                const cleanPin = pinVal.replace(/\D/g, '');
+                if (cleanPin) {
+                    setAddress(prev => ({ ...prev, pincode: cleanPin }));
+                    speak(`Pincode set to ${cleanPin}`);
+                }
                 return;
             }
         }
-    }, [handleNext, handleBack, handlePlaceOrder, paymentMethod, triggerCouponApplyByCode, speak]);
+
+        // --- STEP 2: ORDER SUMMARY (COUPON) ---
+        if (currentStep === 2) {
+            const couponVal = extractValue(['coupon', 'promo', 'code'], ['is', 'to', 'apply', 'use', 'set']);
+            if (couponVal) {
+                const cleanCoupon = couponVal.replace(/\s+/g, '').toUpperCase();
+                setCouponCode(cleanCoupon);
+                triggerCouponApplyByCode(cleanCoupon);
+                return;
+            }
+        }
+
+        // --- STEP 3: PAYMENT METHOD & CARD DETAILS ---
+        if (currentStep === 3) {
+            // Select Payment Methods
+            if (lower.includes('razorpay') || lower.includes('select razorpay')) {
+                setPaymentMethod('razorpay');
+                speak("Selected Razorpay payment method.");
+                return;
+            }
+            if (lower.includes('cash on delivery') || lower.includes('cod') || lower.includes('cash delivery')) {
+                setPaymentMethod('cod');
+                speak("Selected Cash on Delivery.");
+                return;
+            }
+            if (lower.includes('use card') || lower.includes('select card') || lower.includes('credit card') || lower.includes('debit card')) {
+                setPaymentMethod('card');
+                speak("Selected Credit or Debit card payment method.");
+                return;
+            }
+            if (lower.includes('use upi') || lower.includes('select upi')) {
+                setPaymentMethod('upi');
+                speak("Selected UPI payment method.");
+                return;
+            }
+
+            // Card details (Only if payment method is card)
+            if (paymentMethod === 'card') {
+                // Cardholder Name
+                const cardNameVal = extractValue(['card name', 'cardholder name', 'cardholder', 'card holder', 'name on card'], ['is', 'to', 'set']);
+                if (cardNameVal) {
+                    setCardDetails(prev => ({ ...prev, name: cardNameVal }));
+                    speak(`Cardholder name set to ${cardNameVal}`);
+                    return;
+                }
+
+                // Card Number
+                const cardNoVal = extractValue(['card number', 'card no', 'number'], ['is', 'to', 'set']);
+                if (cardNoVal) {
+                    const cleanCardNo = cardNoVal.replace(/\D/g, '');
+                    if (cleanCardNo) {
+                        setCardDetails(prev => ({ ...prev, number: cleanCardNo }));
+                        speak("Card number set.");
+                    }
+                    return;
+                }
+
+                // Card Expiry
+                const cardExpVal = extractValue(['expiry', 'expire', 'exp date'], ['is', 'to', 'set']);
+                if (cardExpVal) {
+                    let val = cardExpVal.replace(/[^\d/]/g, '');
+                    if (val.length === 4 && !val.includes('/')) {
+                        val = val.substring(0, 2) + '/' + val.substring(2, 4);
+                    }
+                    setCardDetails(prev => ({ ...prev, expiry: val }));
+                    speak("Card expiry date set.");
+                    return;
+                }
+
+                // CVV
+                const cvvVal = extractValue(['cvv', 'security code', 'cvc'], ['is', 'to', 'set']);
+                if (cvvVal) {
+                    const cleanCvv = cvvVal.replace(/\D/g, '');
+                    if (cleanCvv) {
+                        setCardDetails(prev => ({ ...prev, cvv: cleanCvv }));
+                        speak("Card CVV set.");
+                    }
+                    return;
+                }
+            }
+        }
+    }, [handleNext, handleBack, handlePlaceOrder, currentStep, paymentMethod, triggerCouponApplyByCode, speak]);
 
     useEffect(() => {
         if (lastCommand) {
