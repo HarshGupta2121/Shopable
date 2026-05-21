@@ -23,6 +23,8 @@ export const VoiceProvider = ({ children }) => {
   const pathname = usePathname();
   const latestHandlerRef = useRef(null);
   const debounceRef = useRef(null);
+  const isSpeakingRef = useRef(false);
+  const lastSpeakEndRef = useRef(0);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -36,6 +38,7 @@ export const VoiceProvider = ({ children }) => {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
+      isSpeakingRef.current = false;
     }
   }, []);
 
@@ -44,8 +47,20 @@ export const VoiceProvider = ({ children }) => {
       stopSpeaking();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = language;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        isSpeakingRef.current = true;
+      };
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        isSpeakingRef.current = false;
+        lastSpeakEndRef.current = Date.now();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        isSpeakingRef.current = false;
+        lastSpeakEndRef.current = Date.now();
+      };
       window.speechSynthesis.speak(utterance);
     }
   }, [language, stopSpeaking]);
@@ -177,6 +192,15 @@ export const VoiceProvider = ({ children }) => {
         };
 
         recognition.onresult = (event) => {
+          const now = Date.now();
+          const isSpeakingNow = isSpeakingRef.current || (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking);
+          const inCooldown = (now - lastSpeakEndRef.current) < 1000;
+
+          if (isSpeakingNow || inCooldown) {
+            console.log("Ignoring speech input to avoid feedback loop: speaking/cooldown active");
+            return;
+          }
+
           const current = event.resultIndex;
           const result = event.results[current];
           const transcriptText = result[0].transcript;
@@ -187,11 +211,21 @@ export const VoiceProvider = ({ children }) => {
           if (transcriptText.trim()) {
             if (debounceRef.current) clearTimeout(debounceRef.current);
 
-            // Execute immediately if final, or wait 500ms if interim to catch pause
+            // Execute immediately if final, or wait 800ms if interim to catch pause
             const delay = isFinal ? 0 : 800;
 
             debounceRef.current = setTimeout(() => {
               if (latestHandlerRef.current) {
+                // Check again inside timeout to verify assistant didn't start speaking in the meantime
+                const currentNow = Date.now();
+                const currentlySpeaking = isSpeakingRef.current || (typeof window !== 'undefined' && window.speechSynthesis && window.speechSynthesis.speaking);
+                const currentlyInCooldown = (currentNow - lastSpeakEndRef.current) < 1000;
+
+                if (currentlySpeaking || currentlyInCooldown) {
+                  console.log("Discarding processed command due to speech/cooldown overlap");
+                  return;
+                }
+
                 // Only process matches that seem like complete commands or if final
                 if (transcriptText.length > 3) {
                   latestHandlerRef.current(transcriptText);
