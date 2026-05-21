@@ -51,6 +51,10 @@ export default function CheckoutPage() {
     });
     const [focusedCardField, setFocusedCardField] = useState('');
 
+    // UPI Details State
+    const [upiId, setUpiId] = useState('');
+    const [focusedUpiField, setFocusedUpiField] = useState(false);
+
     useEffect(() => {
         if (isAuthenticated && user) {
             fetch('/api/user/addresses', { headers: { 'x-user-id': user.id } })
@@ -110,6 +114,20 @@ export default function CheckoutPage() {
             if (!cardDetails.number?.trim() || !cardDetails.name?.trim() || !cardDetails.expiry?.trim() || !cardDetails.cvv?.trim()) {
                 speak("Please fill in all credit card fields to continue.");
                 alert("Please fill in all credit card fields to continue.");
+                return;
+            }
+        }
+
+        if (paymentMethod === 'upi') {
+            if (!upiId?.trim()) {
+                speak("Please enter your UPI ID to continue.");
+                alert("Please enter your UPI ID to continue.");
+                return;
+            }
+            const upiPattern = /^[\w.\-]+@[\w.\-]+$/;
+            if (!upiPattern.test(upiId.trim())) {
+                speak("Please enter a valid UPI ID in the format username@provider.");
+                alert("Please enter a valid UPI ID (e.g. username@ybl).");
                 return;
             }
         }
@@ -470,6 +488,17 @@ export default function CheckoutPage() {
                     return;
                 }
             }
+
+            // UPI details (Only if payment method is upi)
+            if (paymentMethod === 'upi') {
+                const upiVal = extractValue(['upi id', 'upi address', 'upi ID', 'upi'], ['is', 'to', 'set']);
+                if (upiVal) {
+                    let cleanUpi = upiVal.replace(/\s+at\s+/i, '@').replace(/\s+/g, '');
+                    setUpiId(cleanUpi);
+                    speak(`UPI ID set to ${cleanUpi}`);
+                    return;
+                }
+            }
         }
     }, [handleNext, handleBack, handlePlaceOrder, currentStep, paymentMethod, triggerCouponApplyByCode, speak]);
 
@@ -510,6 +539,13 @@ export default function CheckoutPage() {
                         { label: "Expiry 12/28", command: "expiry 12/28" },
                         { label: "CVV 999", command: "cvv 999" },
                         { label: "Card Name Harsh Gupta", command: "card name Harsh Gupta" },
+                        { label: "Place Order", command: "place order" },
+                        ...base
+                    ];
+                }
+                if (paymentMethod === 'upi') {
+                    return [
+                        { label: "Set UPI ID abc@ybl", command: "set upi id abc@ybl" },
                         { label: "Place Order", command: "place order" },
                         ...base
                     ];
@@ -736,16 +772,128 @@ export default function CheckoutPage() {
                                     </label>
 
                                     {/* UPI */}
-                                    <label className={`block p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === 'upi' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <input type="radio" name="payment" className="w-5 h-5 accent-primary" checked={paymentMethod === 'upi'} onChange={() => setPaymentMethod('upi')} />
-                                            <div className="p-2 bg-white rounded-full border shadow-sm"><Smartphone className="w-5 h-5 text-purple-600" /></div>
-                                            <div className="flex-1">
-                                                <span className="font-semibold block">UPI</span>
-                                                <span className="text-xs text-muted-foreground">Google Pay, PhonePe, Paytm</span>
+                                    <div className="space-y-2">
+                                        <label className={`block p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === 'upi' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <input type="radio" name="payment" className="w-5 h-5 accent-primary" checked={paymentMethod === 'upi'} onChange={() => setPaymentMethod('upi')} />
+                                                <div className="p-2 bg-white rounded-full border shadow-sm"><Smartphone className="w-5 h-5 text-purple-600" /></div>
+                                                <div className="flex-1">
+                                                    <span className="font-semibold block">UPI</span>
+                                                    <span className="text-xs text-muted-foreground">Google Pay, PhonePe, Paytm</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </label>
+                                        </label>
+
+                                        {paymentMethod === 'upi' && (
+                                            <div className="p-5 border border-border rounded-xl bg-gray-50/50 dark:bg-slate-900/30 space-y-6 mt-2 animate-in slide-in-from-top-4 duration-300">
+                                                <style>{`
+                                                    @keyframes scan {
+                                                        0% { top: 0%; opacity: 0.8; }
+                                                        50% { top: 100%; opacity: 1; }
+                                                        100% { top: 0%; opacity: 0.8; }
+                                                    }
+                                                    .animate-laser {
+                                                        animation: scan 2.5s infinite ease-in-out;
+                                                    }
+                                                `}</style>
+                                                
+                                                <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                                                    {/* UPI Input fields */}
+                                                    <div className="md:col-span-7 space-y-4">
+                                                        <div className="space-y-2">
+                                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">UPI ID</label>
+                                                            <div className="relative">
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="username@bank"
+                                                                    value={upiId}
+                                                                    onChange={(e) => setUpiId(e.target.value)}
+                                                                    onFocus={() => setFocusedUpiField(true)}
+                                                                    onBlur={() => setFocusedUpiField(false)}
+                                                                    className="w-full h-10 px-3 border rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all pr-12 text-sm bg-white dark:bg-slate-900"
+                                                                />
+                                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center">
+                                                                    <Smartphone className={`w-4 h-4 transition-colors duration-300 ${focusedUpiField ? 'text-purple-500' : 'text-gray-400'}`} />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Quick-Suffix Suggestion Pills */}
+                                                        <div className="space-y-2">
+                                                            <span className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider block">Quick Handles</span>
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {['@okhdfcbank', '@okicici', '@ybl', '@paytm', '@upi'].map((suffix) => (
+                                                                    <button
+                                                                        key={suffix}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setUpiId(prev => {
+                                                                                const parts = prev.split('@');
+                                                                                const username = parts[0] ? parts[0].trim() : '';
+                                                                                return username ? `${username}${suffix}` : `user${suffix}`;
+                                                                            });
+                                                                        }}
+                                                                        className="px-2.5 py-1 text-xs border border-purple-100 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-800 bg-white dark:bg-slate-900 text-purple-700 dark:text-purple-400 rounded-full cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-950/30 transition-all font-semibold active:scale-95 shadow-sm animate-in fade-in zoom-in-95 duration-200"
+                                                                    >
+                                                                        {suffix}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* SVG QR Code Visualizer */}
+                                                    <div className="md:col-span-5 flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-gray-200/60 dark:border-slate-800 pt-6 md:pt-0 md:pl-6">
+                                                        <div className="relative w-36 h-36 bg-slate-950/5 dark:bg-white/5 border border-slate-200/50 dark:border-slate-800 rounded-xl p-3 flex items-center justify-center overflow-hidden shadow-inner">
+                                                            {/* Sliding Laser Line */}
+                                                            <div 
+                                                                className={`absolute left-0 w-full h-[2px] transition-all duration-500 animate-laser z-10 ${
+                                                                    focusedUpiField ? 'bg-gradient-to-r from-transparent via-purple-500 to-transparent shadow-[0_0_8px_#a855f7]' : 'bg-gradient-to-r from-transparent via-teal-500 to-transparent shadow-[0_0_8px_#14b8a6]'
+                                                                }`} 
+                                                            />
+                                                            
+                                                            {/* SVG QR Code */}
+                                                            <svg width="100" height="100" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full text-slate-800 dark:text-slate-200">
+                                                                <path d="M5 5h20v4H9v16H5V5zm90 0h20v20h-4V9H95V5zM5 95h4v16h16v4H5V95zm110 0v20H95v-4h16V95h4z" fill="currentColor" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="15" y="15" width="22" height="22" rx="4" stroke="currentColor" strokeWidth="3" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="21" y="21" width="10" height="10" rx="2" fill="currentColor" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="83" y="15" width="22" height="22" rx="4" stroke="currentColor" strokeWidth="3" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="89" y="21" width="10" height="10" rx="2" fill="currentColor" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="15" y="83" width="22" height="22" rx="4" stroke="currentColor" strokeWidth="3" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="21" y="89" width="10" height="10" rx="2" fill="currentColor" className="transition-colors duration-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <rect x="45" y="15" width="6" height="6" rx="1" fill="currentColor" className="opacity-80 text-purple-400" />
+                                                                <rect x="55" y="25" width="12" height="6" rx="1" fill="currentColor" className="opacity-75 text-teal-500" />
+                                                                <rect x="71" y="15" width="6" height="12" rx="1" fill="currentColor" className="opacity-70 text-slate-400" />
+                                                                <rect x="45" y="37" width="18" height="6" rx="1" fill="currentColor" className="opacity-80 text-teal-600" />
+                                                                <rect x="69" y="37" width="8" height="8" rx="1" fill="currentColor" className="opacity-75 text-purple-600" />
+                                                                <rect x="15" y="45" width="6" height="18" rx="1" fill="currentColor" className="opacity-70 text-slate-400" />
+                                                                <rect x="27" y="51" width="12" height="6" rx="1" fill="currentColor" className="opacity-80 text-purple-400" />
+                                                                <rect x="45" y="55" width="6" height="6" rx="1" fill="currentColor" className="opacity-75 text-teal-500" />
+                                                                <rect x="57" y="49" width="18" height="18" rx="2" fill="currentColor" className="opacity-10 text-purple-600" />
+                                                                <rect x="63" y="55" width="6" height="6" rx="1" fill="currentColor" className="opacity-80 text-purple-700" />
+                                                                <rect x="83" y="45" width="12" height="6" rx="1" fill="currentColor" className="opacity-70 text-slate-400" />
+                                                                <rect x="99" y="51" width="6" height="18" rx="1" fill="currentColor" className="opacity-80 text-teal-600" />
+                                                                <rect x="45" y="73" width="12" height="6" rx="1" fill="currentColor" className="opacity-80 text-teal-600" />
+                                                                <rect x="63" y="73" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="2" className="opacity-60 text-purple-500" style={{ color: focusedUpiField ? '#8b5cf6' : '#0f766e' }} />
+                                                                <circle cx="70" cy="80" r="3" fill="currentColor" className="opacity-80 text-purple-700" />
+                                                                <rect x="83" y="73" width="6" height="6" rx="1" fill="currentColor" className="opacity-75 text-teal-500" />
+                                                                <rect x="95" y="79" width="10" height="10" rx="1" fill="currentColor" className="opacity-80 text-purple-400" />
+                                                                <rect x="45" y="89" width="6" height="12" rx="1" fill="currentColor" className="opacity-70 text-slate-400" />
+                                                                <rect x="55" y="99" width="12" height="6" rx="1" fill="currentColor" className="opacity-80 text-teal-500" />
+                                                                <rect x="83" y="95" width="12" height="12" rx="2" fill="currentColor" className="opacity-90 text-purple-600" />
+                                                            </svg>
+                                                        </div>
+                                                        <div className="text-center mt-2 flex items-center gap-1.5 justify-center">
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${focusedUpiField ? 'bg-purple-500 animate-ping' : 'bg-teal-500'}`} />
+                                                            <span className={`text-[10px] uppercase tracking-widest font-bold transition-colors duration-300 ${focusedUpiField ? 'text-purple-500' : 'text-teal-600 dark:text-teal-400'}`}>
+                                                                {focusedUpiField ? 'Scanning Active' : 'Scan Ready'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* Card */}
                                     <div className="space-y-2">
