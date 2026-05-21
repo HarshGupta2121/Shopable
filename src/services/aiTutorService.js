@@ -1,7 +1,7 @@
 export const processTutorCommand = async (command, language = 'en-US') => {
     try {
-        // Prepare simple history context (in a real app, we'd pass actual chat history from state)
-        // For now, we only pass the current command.
+        // Prepare history context from global window object
+        const history = typeof window !== 'undefined' ? window.tutorHistory || [] : [];
 
         const res = await fetch('/api/tutor', {
             method: 'POST',
@@ -9,7 +9,7 @@ export const processTutorCommand = async (command, language = 'en-US') => {
             body: JSON.stringify({
                 message: command,
                 language: language,
-                history: [] // We could pass history here if we refactor AITutor.jsx to pass it down
+                history: history
             })
         });
 

@@ -18,36 +18,34 @@ export async function POST(request) {
              systemInstruction += " The user prefers Hindi explanation occasionally, but encourage them to speak English. You can use Hinglish for clarity.";
         }
 
-        // Format history for Gemini (checking if API supports history directly or if we need to append)
-        // For simple flash usage, we can just append history to the prompt or use the `contents` array structure.
-        // Structure: { contents: [{ role: "user", parts: [{ text: "..." }] }, { role: "model", parts: [{ text: "..." }] }] }
-        
+        // Format history for Gemini
         const contents = [];
         
-        // Add system instruction effectively by prepending to first user message or history
-        // (Gemini Flash supports system_instruction but strictly in the updated API, for simplicity we might just prepend to context)
-        
-        // Let's use the explicit contents array from history if provided, or build it
         if (history && Array.isArray(history)) {
-            history.forEach(msg => {
+            // Keep only the last 10 messages to avoid context bloat
+            const recentHistory = history.slice(-10);
+            recentHistory.forEach(msg => {
                 contents.push({
                     role: msg.sender === 'user' ? 'user' : 'model',
                     parts: [{ text: msg.text }]
                 });
             });
         }
-
+ 
         // Add current message
         contents.push({
             role: 'user',
-            parts: [{ text: `${systemInstruction}\n\nUser: ${message}` }] 
+            parts: [{ text: message }] 
         });
-
+ 
         const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: contents
+                contents: contents,
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
+                }
             })
         });
 

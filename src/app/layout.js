@@ -1,4 +1,3 @@
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { VoiceProvider } from "@/context/VoiceContext";
 import { CartProvider } from "@/context/CartContext";
@@ -13,15 +12,8 @@ import Layout from "@/components/Layout";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",  
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = { variable: "--font-geist-sans" };
+const geistMono = { variable: "--font-geist-mono" };
 
 export const metadata = {
   title: "VoiceShop - Accessible E-commerce",
