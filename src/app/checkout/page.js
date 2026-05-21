@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useVoice } from '@/context/VoiceContext';
 import { useCart } from '@/context/CartContext';
 import { useAuth } from '@/context/AuthContext';
@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 
 export default function CheckoutPage() {
-    const { speak } = useVoice();
+    const { speak, lastCommand, lastCommandId } = useVoice();
     const { cart, total, clearCart } = useCart();
     const { user, isAuthenticated } = useAuth();
     const router = useRouter();
@@ -41,6 +41,15 @@ export default function CheckoutPage() {
     const [isOrderPlaced, setIsOrderPlaced] = useState(false);
     const [orderId, setOrderId] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // Card Details State
+    const [cardDetails, setCardDetails] = useState({
+        number: '',
+        name: '',
+        expiry: '',
+        cvv: ''
+    });
+    const [focusedCardField, setFocusedCardField] = useState('');
 
     useEffect(() => {
         if (isAuthenticated && user) {
@@ -95,6 +104,14 @@ export default function CheckoutPage() {
             speak("Please sign in to place your order.");
             router.push('/signin?redirect=/checkout');
             return;
+        }
+
+        if (paymentMethod === 'card') {
+            if (!cardDetails.number?.trim() || !cardDetails.name?.trim() || !cardDetails.expiry?.trim() || !cardDetails.cvv?.trim()) {
+                speak("Please fill in all credit card fields to continue.");
+                alert("Please fill in all credit card fields to continue.");
+                return;
+            }
         }
 
         setIsProcessing(true);
@@ -254,15 +271,15 @@ export default function CheckoutPage() {
         );
     }
 
-    const handleApplyCoupon = async () => {
-        if (!couponCode.trim()) return;
+    const triggerCouponApplyByCode = useCallback(async (code) => {
+        if (!code.trim()) return;
         setApplyingCoupon(true);
         setCouponError('');
         try {
             const res = await fetch('/api/coupons/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code: couponCode, subtotal: total })
+                body: JSON.stringify({ code: code, subtotal: total })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to apply coupon');
@@ -276,12 +293,219 @@ export default function CheckoutPage() {
         } finally {
             setApplyingCoupon(false);
         }
+    }, [total, speak]);
+
+    const handleApplyCoupon = () => {
+        triggerCouponApplyByCode(couponCode);
     };
 
     const handleRemoveCoupon = () => {
         setAppliedCoupon(null);
         setDiscountAmount(0);
         setCouponCode('');
+    };
+
+    const processLocalVoiceCommand = useCallback((commandText) => {
+        if (!commandText) return;
+        const lower = commandText.toLowerCase();
+
+        // 1. Navigation & Stepper Commands
+        if (lower.includes('next') || lower.includes('continue') || lower.includes('save & continue') || lower.includes('aage badho') || lower.includes('samne jao') || lower.includes('go to summary') || lower.includes('continue to payment')) {
+            handleNext();
+            return;
+        }
+        if (lower.includes('back') || lower.includes('go back') || lower.includes('peeche jao')) {
+            handleBack();
+            return;
+        }
+        if (lower.includes('place order') || lower.includes('order place') || lower.includes('order confirm') || lower.includes('khareedo')) {
+            handlePlaceOrder();
+            return;
+        }
+
+        // 2. Select Payment Methods
+        if (lower.includes('razorpay') || lower.includes('select razorpay')) {
+            setPaymentMethod('razorpay');
+            speak("Selected Razorpay payment method.");
+            return;
+        }
+        if (lower.includes('cash on delivery') || lower.includes('cod') || lower.includes('cash delivery')) {
+            setPaymentMethod('cod');
+            speak("Selected Cash on Delivery.");
+            return;
+        }
+        if (lower.includes('use card') || lower.includes('select card') || lower.includes('credit card') || lower.includes('debit card')) {
+            setPaymentMethod('card');
+            speak("Selected Credit or Debit card payment method.");
+            return;
+        }
+        if (lower.includes('use upi') || lower.includes('select upi')) {
+            setPaymentMethod('upi');
+            speak("Selected UPI payment method.");
+            return;
+        }
+
+        // 3. Address Field Voice Filling
+        // Name
+        const nameMatch = lower.match(/(?:my name|set name|naam is|naam ke liye|name is|name to|name)\s*(?:is|to)?\s+(.+)/i);
+        if (nameMatch && nameMatch[1]) {
+            const cleanVal = nameMatch[1].trim();
+            setAddress(prev => ({ ...prev, name: cleanVal }));
+            speak(`Name set to ${cleanVal}`);
+            return;
+        }
+
+        // Phone
+        const phoneMatch = lower.match(/(?:my phone|set phone|set contact|phone number|phone is|number is|number|phone)\s*(?:is|to)?\s+(.+)/i);
+        if (phoneMatch && phoneMatch[1]) {
+            const cleanVal = phoneMatch[1].replace(/\s+/g, '').trim();
+            setAddress(prev => ({ ...prev, phone: cleanVal }));
+            speak(`Phone set to ${cleanVal}`);
+            return;
+        }
+
+        // Street Address
+        const streetMatch = lower.match(/(?:my address|set address|set street|street is|street to|address is|address|street)\s*(?:is|to)?\s+(.+)/i);
+        if (streetMatch && streetMatch[1]) {
+            const cleanVal = streetMatch[1].trim();
+            setAddress(prev => ({ ...prev, street: cleanVal }));
+            speak(`Street address set to ${cleanVal}`);
+            return;
+        }
+
+        // City
+        const cityMatch = lower.match(/(?:my city|set city|city is|city to|city)\s*(?:is|to)?\s+(.+)/i);
+        if (cityMatch && cityMatch[1]) {
+            const cleanVal = cityMatch[1].trim();
+            setAddress(prev => ({ ...prev, city: cleanVal }));
+            speak(`City set to ${cleanVal}`);
+            return;
+        }
+
+        // Pincode
+        const pinMatch = lower.match(/(?:my pincode|set pincode|my pin|set pin|pincode is|pin is|pincode|pin)\s*(?:is|to)?\s+(\d+)/i);
+        if (pinMatch && pinMatch[1]) {
+            const cleanVal = pinMatch[1].trim();
+            setAddress(prev => ({ ...prev, pincode: cleanVal }));
+            speak(`Pincode set to ${cleanVal}`);
+            return;
+        }
+
+        // Coupon Apply
+        const couponMatch = lower.match(/(?:apply coupon|use coupon|coupon code|coupon)\s*(?:is|to)?\s+(.+)/i);
+        if (couponMatch && couponMatch[1]) {
+            const code = couponMatch[1].replace(/\s+/g, '').toUpperCase().trim();
+            setCouponCode(code);
+            triggerCouponApplyByCode(code);
+            return;
+        }
+
+        // 4. Card Form Voice Filling (when Card payment is active)
+        if (paymentMethod === 'card') {
+            // Card Number
+            const cardNoMatch = lower.match(/(?:card number|set card number|number is|number)\s*(?:is|to)?\s+(.+)/i);
+            if (cardNoMatch && cardNoMatch[1]) {
+                const cleanVal = cardNoMatch[1].replace(/\s+/g, '').trim();
+                setCardDetails(prev => ({ ...prev, number: cleanVal }));
+                speak("Card number set.");
+                return;
+            }
+            // Card Expiry
+            const cardExpMatch = lower.match(/(?:expiry|card expiry|expire date|expire)\s*(?:is|to)?\s+(.+)/i);
+            if (cardExpMatch && cardExpMatch[1]) {
+                let val = cardExpMatch[1].replace(/\s+/g, '').replace(/[^\d/]/g, '').trim();
+                if (val.length === 4 && !val.includes('/')) {
+                    val = val.substring(0, 2) + '/' + val.substring(2, 4);
+                }
+                setCardDetails(prev => ({ ...prev, expiry: val }));
+                speak("Card expiry date set.");
+                return;
+            }
+            // CVV
+            const cvvMatch = lower.match(/(?:cvv|security code)\s*(?:is|to)?\s+(\d+)/i);
+            if (cvvMatch && cvvMatch[1]) {
+                const cleanVal = cvvMatch[1].trim();
+                setCardDetails(prev => ({ ...prev, cvv: cleanVal }));
+                speak("Card CVV set.");
+                return;
+            }
+            // Card Name
+            const cardNameMatch = lower.match(/(?:card name|cardholder|card holder|name on card)\s*(?:is|to)?\s+(.+)/i);
+            if (cardNameMatch && cardNameMatch[1]) {
+                const cleanVal = cardNameMatch[1].trim();
+                setCardDetails(prev => ({ ...prev, name: cleanVal }));
+                speak(`Cardholder name set to ${cleanVal}`);
+                return;
+            }
+        }
+    }, [handleNext, handleBack, handlePlaceOrder, paymentMethod, triggerCouponApplyByCode, speak]);
+
+    useEffect(() => {
+        if (lastCommand) {
+            processLocalVoiceCommand(lastCommand);
+        }
+    }, [lastCommandId]);
+
+    const getSuggestionChips = () => {
+        switch (currentStep) {
+            case 1:
+                return [
+                    { label: "Set name Harsh Gupta", command: "set name Harsh Gupta" },
+                    { label: "Set street Connaught Place", command: "set street Connaught Place" },
+                    { label: "Set city New Delhi", command: "set city New Delhi" },
+                    { label: "Set pincode 110001", command: "set pincode 110001" },
+                    { label: "Set phone 9876543210", command: "set phone 9876543210" },
+                    { label: "Save & Continue", command: "save & continue" }
+                ];
+            case 2:
+                return [
+                    { label: "Apply coupon WELCOME10", command: "apply coupon WELCOME10" },
+                    { label: "Continue to Payment", command: "continue to payment" },
+                    { label: "Go back", command: "go back" }
+                ];
+            case 3:
+                const base = [
+                    { label: "Use Razorpay", command: "use razorpay" },
+                    { label: "Use Cash on Delivery", command: "use cod" },
+                    { label: "Use Card", command: "use card" },
+                    { label: "Use UPI", command: "use upi" },
+                    { label: "Go back", command: "go back" }
+                ];
+                if (paymentMethod === 'card') {
+                    return [
+                        { label: "Card Number 4321 5678 1234 5678", command: "card number 4321 5678 1234 5678" },
+                        { label: "Expiry 12/28", command: "expiry 12/28" },
+                        { label: "CVV 999", command: "cvv 999" },
+                        { label: "Card Name Harsh Gupta", command: "card name Harsh Gupta" },
+                        { label: "Place Order", command: "place order" },
+                        ...base
+                    ];
+                }
+                return base;
+            default:
+                return [];
+        }
+    };
+
+    const handleSuggestionClick = (command) => {
+        processLocalVoiceCommand(command);
+    };
+
+    const formatCardNumber = (value) => {
+        const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+        const matches = v.match(/\d{4,16}/g);
+        const match = (matches && matches[0]) || '';
+        const parts = [];
+
+        for (let i = 0, len = match.length; i < len; i += 4) {
+            parts.push(match.substring(i, i + 4));
+        }
+
+        if (parts.length > 0) {
+            return parts.join(' ');
+        } else {
+            return v;
+        }
     };
 
     const finalTotal = total - discountAmount;
@@ -491,16 +715,159 @@ export default function CheckoutPage() {
                                     </label>
 
                                     {/* Card */}
-                                    <label className={`block p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === 'card' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <input type="radio" name="payment" className="w-5 h-5 accent-primary" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} />
-                                            <div className="p-2 bg-white rounded-full border shadow-sm"><CreditCard className="w-5 h-5 text-blue-600" /></div>
-                                            <div className="flex-1">
-                                                <span className="font-semibold block">Credit / Debit Card</span>
-                                                <span className="text-xs text-muted-foreground">Visa, Mastercard, RuPay</span>
+                                    <div className="space-y-2">
+                                        <label className={`block p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === 'card' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <input type="radio" name="payment" className="w-5 h-5 accent-primary" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} />
+                                                <div className="p-2 bg-white rounded-full border shadow-sm"><CreditCard className="w-5 h-5 text-blue-600" /></div>
+                                                <div className="flex-1">
+                                                    <span className="font-semibold block">Credit / Debit Card</span>
+                                                    <span className="text-xs text-muted-foreground">Visa, Mastercard, RuPay</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </label>
+                                        </label>
+
+                                        {paymentMethod === 'card' && (
+                                            <div className="p-5 border border-border rounded-xl bg-gray-50/50 dark:bg-slate-900/30 space-y-6 mt-2 animate-in slide-in-from-top-4 duration-300">
+                                                {/* 3D Card Visualizer Container */}
+                                                <div className="flex justify-center py-4">
+                                                    <div className="w-80 h-48 [perspective:1000px]">
+                                                        <div 
+                                                            className={`relative w-full h-full rounded-2xl shadow-xl transition-all duration-700 [transform-style:preserve-3d] ${
+                                                                focusedCardField === 'cvv' ? '[transform:rotateY(180deg)]' : ''
+                                                            }`}
+                                                        >
+                                                            {/* Front Face */}
+                                                            <div className="absolute inset-0 w-full h-full rounded-2xl bg-gradient-to-br from-teal-800 to-cyan-900 p-6 text-white flex flex-col justify-between [backface-visibility:hidden] overflow-hidden border border-teal-700/50">
+                                                                <div className="absolute -right-10 -top-10 w-32 h-32 bg-cyan-700/20 rounded-full blur-2xl" />
+                                                                <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-teal-600/20 rounded-full blur-2xl" />
+                                                                
+                                                                <div className="flex justify-between items-start z-10">
+                                                                    <div>
+                                                                        <p className="text-[10px] uppercase tracking-widest text-teal-200">Shopable Card</p>
+                                                                        <div className="w-10 h-8 bg-amber-400/80 rounded-md mt-2 flex items-center justify-center opacity-90 border border-amber-300/30">
+                                                                            <div className="w-6 h-5 border border-amber-500/30 rounded flex flex-wrap" />
+                                                                        </div>
+                                                                    </div>
+                                                                    <span className="font-bold italic text-lg tracking-wider text-teal-100">VISA</span>
+                                                                </div>
+                                                                
+                                                                <div className="my-2 z-10">
+                                                                    <p className="text-xl font-mono tracking-[0.2em] font-medium text-center">
+                                                                        {cardDetails.number ? formatCardNumber(cardDetails.number) : '•••• •••• •••• ••••'}
+                                                                    </p>
+                                                                </div>
+                                                                
+                                                                <div className="flex justify-between items-end z-10">
+                                                                    <div className="max-w-[70%]">
+                                                                        <p className="text-[8px] uppercase tracking-widest text-teal-300">Cardholder Name</p>
+                                                                        <p className="text-sm font-semibold truncate uppercase tracking-wider">
+                                                                            {cardDetails.name || 'YOUR NAME'}
+                                                                        </p>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[8px] uppercase tracking-widest text-teal-300">Expires</p>
+                                                                        <p className="text-sm font-semibold tracking-wider">
+                                                                            {cardDetails.expiry || 'MM/YY'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Back Face */}
+                                                            <div className="absolute inset-0 w-full h-full rounded-2xl bg-gradient-to-br from-cyan-950 to-slate-900 text-white flex flex-col justify-between [backface-visibility:hidden] [transform:rotateY(180deg)] border border-slate-800">
+                                                                <div className="w-full h-10 bg-slate-950 mt-4" />
+                                                                <div className="px-6 flex flex-col gap-2">
+                                                                    <p className="text-[8px] uppercase tracking-widest text-slate-400 text-right">Authorized Signature</p>
+                                                                    <div className="w-full h-10 bg-slate-100 rounded flex items-center justify-end px-3">
+                                                                        <span className="text-slate-800 font-mono tracking-wider pr-2 font-bold italic line-through select-none">Shopable</span>
+                                                                        <span className="text-slate-900 font-mono font-bold bg-amber-100 px-2 py-0.5 rounded shadow-inner text-sm">
+                                                                            {cardDetails.cvv || '•••'}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="p-6 flex justify-between items-center text-[9px] text-slate-500">
+                                                                    <span>Not valid without signature</span>
+                                                                    <span className="font-bold italic text-slate-400">VISA</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Manual Card Fields Form */}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Card Number</label>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={19}
+                                                            placeholder="1234 5678 1234 5678"
+                                                            value={formatCardNumber(cardDetails.number)}
+                                                            onChange={(e) => {
+                                                                const raw = e.target.value.replace(/\s+/g, '');
+                                                                if (/^\d*$/.test(raw)) {
+                                                                    setCardDetails({ ...cardDetails, number: raw });
+                                                                }
+                                                            }}
+                                                            onFocus={() => setFocusedCardField('number')}
+                                                            onBlur={() => setFocusedCardField('')}
+                                                            className="w-full h-10 px-3 border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Cardholder Name</label>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="John Doe"
+                                                            value={cardDetails.name}
+                                                            onChange={(e) => setCardDetails({ ...cardDetails, name: e.target.value })}
+                                                            onFocus={() => setFocusedCardField('name')}
+                                                            onBlur={() => setFocusedCardField('')}
+                                                            className="w-full h-10 px-3 border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">Expiry Date</label>
+                                                        <input
+                                                            type="text"
+                                                            maxLength={5}
+                                                            placeholder="MM/YY"
+                                                            value={cardDetails.expiry}
+                                                            onChange={(e) => {
+                                                                let val = e.target.value.replace(/[^\d/]/g, '');
+                                                                if (val.length === 2 && !val.includes('/') && cardDetails.expiry.length < 2) {
+                                                                    val = val + '/';
+                                                                }
+                                                                setCardDetails({ ...cardDetails, expiry: val });
+                                                            }}
+                                                            onFocus={() => setFocusedCardField('expiry')}
+                                                            onBlur={() => setFocusedCardField('')}
+                                                            className="w-full h-10 px-3 border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-medium">CVV</label>
+                                                        <input
+                                                            type="password"
+                                                            maxLength={3}
+                                                            placeholder="•••"
+                                                            value={cardDetails.cvv}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (/^\d*$/.test(val)) {
+                                                                    setCardDetails({ ...cardDetails, cvv: val });
+                                                                }
+                                                            }}
+                                                            onFocus={() => setFocusedCardField('cvv')}
+                                                            onBlur={() => setFocusedCardField('')}
+                                                            className="w-full h-10 px-3 border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
 
                                     {/* COD */}
                                     <label className={`block p-4 border rounded-xl cursor-pointer transition-all ${paymentMethod === 'cod' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:border-primary/50'}`}>
@@ -597,6 +964,31 @@ export default function CheckoutPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Voice Assistant Suggestion Bar */}
+                <div className="mt-8 bg-teal-50/60 dark:bg-slate-900/60 backdrop-blur-md rounded-2xl border border-teal-100/50 dark:border-slate-800 p-5 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-2.5 h-2.5 bg-teal-500 rounded-full animate-pulse" />
+                        <h4 className="text-sm font-bold text-teal-800 dark:text-teal-300 uppercase tracking-wider">Voice Control Helper</h4>
+                    </div>
+                    <p className="text-xs text-teal-600 dark:text-teal-400 mb-4">
+                        You can speak these commands or click them directly to perform actions:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {getSuggestionChips().map((chip, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleSuggestionClick(chip.command)}
+                                className="px-3.5 py-1.5 bg-white dark:bg-slate-800 text-teal-800 dark:text-teal-200 text-xs font-semibold rounded-full border border-teal-100 dark:border-slate-700 hover:bg-teal-50 dark:hover:bg-slate-700 hover:border-teal-200 dark:hover:border-slate-600 transition-all duration-200 flex items-center gap-1.5 shadow-sm active:scale-95 text-left"
+                            >
+                                <span className="text-teal-400">“</span>
+                                {chip.label}
+                                <span className="text-teal-400">”</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
             </div>
         </div>
     );
